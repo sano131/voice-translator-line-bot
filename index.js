@@ -4,7 +4,7 @@ const axios = require("axios");
 const fs = require("fs");
 const fetch = require("node-fetch");
 const FormData = require("form-data");
-const { Configuration, OpenAIApi } = require("openai");
+const OpenAI = require("openai");
 const { Client, middleware } = require("@line/bot-sdk");
 
 const app = express();
@@ -17,12 +17,10 @@ const config = {
 };
 const lineClient = new Client(config);
 
-// OpenAI設定
-const openai = new OpenAIApi(
-  new Configuration({
-    apiKey: process.env.OPENAI_API_KEY,
-  })
-);
+// OpenAI設定（v4対応）
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 app.post("/webhook", middleware(config), async (req, res) => {
   const events = req.body.events;
@@ -45,12 +43,12 @@ app.post("/webhook", middleware(config), async (req, res) => {
           const tempFilePath = "./temp_audio.m4a";
           fs.writeFileSync(tempFilePath, audioBuffer);
 
-          const transcription = await openai.createTranscription(
-            fs.createReadStream(tempFilePath),
-            "whisper-1"
-          );
+          const transcription = await openai.audio.transcriptions.create({
+            file: fs.createReadStream(tempFilePath),
+            model: "whisper-1",
+          });
 
-          const translated = await openai.createChatCompletion({
+          const translated = await openai.chat.completions.create({
             model: "gpt-3.5-turbo",
             messages: [
               {
@@ -59,12 +57,12 @@ app.post("/webhook", middleware(config), async (req, res) => {
               },
               {
                 role: "user",
-                content: transcription.data.text,
+                content: transcription.text,
               },
             ],
           });
 
-          const replyText = `🎤 認識された内容:\n「${transcription.data.text}」\n\n🌍 英訳:\n${translated.data.choices[0].message.content}`;
+          const replyText = `🎤 認識された内容:\n「${transcription.text}」\n\n🌍 英訳:\n${translated.choices[0].message.content}`;
 
           await lineClient.replyMessage(event.replyToken, {
             type: "text",
